@@ -7,7 +7,6 @@ defmodule Clickhousex do
   for queries, connection backoff, logging, pooling and
   more.
   """
-
   alias Clickhousex.Query
 
   @typedoc """

@@ -1,5 +1,5 @@
 defmodule Clickhousex.Codec.RowBinary do
-  alias Clickhousex.{Codec, Codec.Binary}
+  alias Clickhousex.{Codec, Codec.Binary, Type}
 
   @behaviour Codec
 
@@ -30,43 +30,50 @@ defmodule Clickhousex.Codec.RowBinary do
     decode_metadata(rest, column_count)
   end
 
-  defp decode_metadata(bytes, column_count) do
+  @spec decode_metadata(binary, integer) :: {:ok, map}
+  defp decode_metadata(bytes, column_count) when is_binary(bytes) and is_integer(column_count) do
     {:ok, column_names, rest} = decode_column_names(bytes, column_count, [])
     {:ok, column_types, rest} = decode_column_types(rest, column_count, [])
 
     {:ok, rows} = decode_rows(rest, column_types, [])
-    {:ok, %{column_names: column_names, rows: rows, count: 0}}
+    {:ok, %{column_names: column_names, column_types: column_types, rows: rows}}
   end
 
-  defp decode_column_names(bytes, 0, names) do
+  @spec decode_column_names(binary, column_count :: integer, [String.t()]) :: {:ok, [String.t()]}
+  defp decode_column_names(bytes, 0, names) when is_binary(bytes) and is_list(names) do
     {:ok, Enum.reverse(names), bytes}
   end
 
-  defp decode_column_names(bytes, column_count, names) do
-    {:ok, column_name, rest} = Binary.decode(bytes, :string)
+  defp decode_column_names(bytes, column_count, names)
+       when is_binary(bytes) and is_integer(column_count) and is_list(names) do
+    {:ok, column_name, rest} = Binary.decode(bytes, Type.String)
     decode_column_names(rest, column_count - 1, [column_name | names])
   end
 
-  defp decode_column_types(bytes, 0, types) do
+  @spec decode_column_types(binary, column_count :: integer, [String.t()]) :: {:ok, [String.t()]}
+  defp decode_column_types(bytes, 0, types) when is_binary(bytes) and is_list(types) do
     {:ok, Enum.reverse(types), bytes}
   end
 
-  defp decode_column_types(bytes, column_count, types) do
-    {:ok, column_type, rest} = Binary.decode(bytes, :string)
-    decode_column_types(rest, column_count - 1, [to_type(column_type) | types])
+  defp decode_column_types(bytes, column_count, types)
+       when is_binary(bytes) and is_integer(column_count) and is_list(types) do
+    {:ok, column_type, rest} = Binary.decode(bytes, Type.String)
+    decode_column_types(rest, column_count - 1, [Type.parse(column_type) | types])
   end
 
+  @spec decode_rows(binary, [Type.t()], [tuple]) :: {:ok, [tuple]}
   defp decode_rows(<<>>, _, rows) do
     {:ok, Enum.reverse(rows)}
   end
 
-  defp decode_rows(bytes, atom_types, rows) do
-    {:ok, row, rest} = decode_row(bytes, atom_types, [])
+  defp decode_rows(bytes, types, rows)
+       when is_binary(bytes) and is_list(types) and is_list(rows) do
+    {:ok, row, rest} = decode_row(bytes, types, [])
 
-    decode_rows(rest, atom_types, [row | rows])
+    decode_rows(rest, types, [row | rows])
   end
 
-  defp decode_row(bytes, [], row) do
+  defp decode_row(bytes, [], row) when is_binary(bytes) and is_list(row) do
     row_tuple =
       row
       |> Enum.reverse()
@@ -75,77 +82,34 @@ defmodule Clickhousex.Codec.RowBinary do
     {:ok, row_tuple, bytes}
   end
 
-  defp decode_row(<<1, rest::binary>>, [{:nullable, _} | types], row) do
+  defp decode_row(<<1, rest::binary>>, [%_{nullable: true} | types], row) when is_list(row) do
     decode_row(rest, types, [nil | row])
   end
 
-  defp decode_row(<<0, rest::binary>>, [{:nullable, actual_type} | types], row) do
-    decode_row(rest, [actual_type | types], row)
+  defp decode_row(<<0, rest::binary>>, [%_{nullable: true} = type | types], row)
+       when is_list(row) do
+    decode_row(rest, [type | types], row)
   end
 
-  defp decode_row(bytes, [{:fixed_string, length} | types], row) do
-    <<value::binary-size(length), rest::binary>> = bytes
+  defp decode_row(bytes, [%Type.Array{element_type: %element_type{}} | types], row)
+       when is_binary(bytes) and is_list(row) do
+    {:ok, value, rest} = Binary.decode(bytes, {:list, element_type})
     decode_row(rest, types, [value | row])
   end
 
-  defp decode_row(bytes, [{:array, elem_type} | types], row) do
-    {:ok, value, rest} = Binary.decode(bytes, {:list, elem_type})
+  defp decode_row(bytes, [%Type.Tuple{element_types: element_types} | types], row)
+       when is_binary(bytes) and is_list(element_types) and is_list(row) do
+    IO.inspect(element_types)
+
+    {:ok, value, rest} =
+      Binary.decode_tuple(bytes, element_types)
+      |> IO.inspect()
+
     decode_row(rest, types, [value | row])
   end
 
-  defp decode_row(bytes, [type | types], row) do
+  defp decode_row(bytes, [%type{} | types], row) do
     {:ok, value, rest} = Binary.decode(bytes, type)
     decode_row(rest, types, [value | row])
-  end
-
-  defp to_type(<<"Nullable(", type::binary>>) do
-    rest_type =
-      type
-      |> String.replace_suffix(")", "")
-      |> to_type()
-
-    {:nullable, rest_type}
-  end
-
-  defp to_type(<<"FixedString(", rest::binary>>) do
-    case Integer.parse(rest) do
-      {length, rest} ->
-        rest
-        |> String.replace_suffix(")", "")
-
-        {:fixed_string, length}
-    end
-  end
-
-  defp to_type(<<"Array(", type::binary>>) do
-    rest_type =
-      type
-      |> String.replace_suffix(")", "")
-      |> to_type()
-
-    {:array, rest_type}
-  end
-
-  @clickhouse_mappings [
-    {"Int64", :i64},
-    {"Int32", :i32},
-    {"Int16", :i16},
-    {"Int8", :i8},
-    {"UInt64", :u64},
-    {"UInt32", :u32},
-    {"UInt16", :u16},
-    {"UInt8", :u8},
-    {"Float64", :f64},
-    {"Float32", :f32},
-    {"Float16", :f16},
-    {"Float8", :f8},
-    {"String", :string},
-    {"Date", :date},
-    {"DateTime", :datetime}
-  ]
-  for {clickhouse_type, local_type} <- @clickhouse_mappings do
-    defp to_type(unquote(clickhouse_type)) do
-      unquote(local_type)
-    end
   end
 end

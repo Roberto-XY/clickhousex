@@ -1,0 +1,27 @@
+$ clickhouse-client --param_parName="[1, 2]"  -q "SELECT * FROM table WHERE a = {parName:Array(UInt16)}"
+clickhouse_cmd = """
+clickhouse-client --host localhost --port 9000 --query="SHOW TABLES FORMAT TabSeparatedWithNamesAndTypes"
+"""
+System.cmd("sh", ["-c", clickhouse_cmd])
+
+clickhouse_cmd = """
+clickhouse-client --host localhost --port 9000 --time --query="SELECT * FROM sales_tes LIMIT 2 FORMAT RowBinaryWithNamesAndTypes"
+"""
+{res, 0} = System.cmd("sh", ["-c", clickhouse_cmd])
+
+
+
+clickhouse_cmd = """
+clickhouse-client --host localhost --port 9000 --time --query="SELECT [1,3,5], (5, 'ää', 4), 1 = 2, toFixedString('h', 33) FORMAT RowBinaryWithNamesAndTypes"
+"""
+{res, 0} = System.cmd("sh", ["-c", clickhouse_cmd])
+Clickhousex.Codec.RowBinary.decode(res) 
+
+
+
+clickhouse_cmd = """
+clickhouse-client --host localhost --time --query="SELECT (5, 'ää', 4) FORMAT RowBinaryWithNamesAndTypes"
+"""
+{res, 0} = System.cmd("sh", ["-c", clickhouse_cmd])
+Clickhousex.Codec.RowBinary.decode(res) 
+

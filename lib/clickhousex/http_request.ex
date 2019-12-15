@@ -1,4 +1,7 @@
 defmodule Clickhousex.HTTPRequest do
+  @type t :: %__MODULE__{post_data: IO.chardata(), query_string_data: IO.chardata()}
+
+  # @enforce_keys [:post_data, :query_string_data]
   defstruct post_data: "", query_string_data: ""
 
   def new() do

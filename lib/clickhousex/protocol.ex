@@ -1,6 +1,5 @@
 defmodule Clickhousex.Protocol do
   @moduledoc false
-
   use DBConnection
 
   alias Clickhousex.HTTPClient, as: Client
@@ -21,11 +20,10 @@ defmodule Clickhousex.Protocol do
   @ping_params DBConnection.Query.encode(@ping_query, [], [])
 
   @doc false
-  @spec connect(opts :: Keyword.t()) ::
-          {:ok, state}
-          | {:error, Exception.t()}
+  @impl true
+  @spec connect(opts :: Keyword.t()) :: {:ok, state} | {:error, Exception.t()}
   def connect(opts) do
-    scheme = opts[:scheme] || :http
+    scheme = opts[:scheme] || :https
     hostname = opts[:hostname] || "localhost"
     port = opts[:port] || 8123
     database = opts[:database] || "default"
@@ -67,21 +65,106 @@ defmodule Clickhousex.Protocol do
   end
 
   @doc false
-  @spec disconnect(err :: Exception.t(), state) :: :ok
-  def disconnect(_err, _state) do
-    :ok
+  @impl true
+  @spec checkout(state) :: {:ok, state}
+  def checkout(state) do
+    {:ok, state}
   end
 
   @doc false
-  @spec ping(state) ::
-          {:ok, state}
-          | {:disconnect, term, state}
+  @impl true
+  @spec checkin(state) :: {:ok, state}
+  def checkin(state) do
+    {:ok, state}
+  end
+
+  @doc false
+  @impl true
+  @spec ping(state) :: {:ok, state} | {:disconnect, term, state}
   def ping(state) do
     case do_query(@ping_query, @ping_params, [], state) do
       {:ok, _, _, new_state} -> {:ok, new_state}
       {:error, reason, new_state} -> {:disconnect, reason, new_state}
-      other -> other
     end
+  end
+
+  @doc false
+  @impl true
+  @spec handle_begin(opts :: Keyword.t(), state) :: no_return
+  def handle_begin(_opts, state) do
+    raise "Unsupported"
+  end
+
+  @doc false
+  @impl true
+  @spec handle_commit(opts :: Keyword.t(), state) :: no_return
+  def handle_commit(_opts, state) do
+    raise "Unsupported"
+  end
+
+  @doc false
+  @impl true
+  @spec handle_rollback(opts :: Keyword.t(), state) :: no_return
+  def handle_rollback(_opts, state) do
+    raise "Unsupported"
+  end
+
+  @doc false
+  @impl true
+  @spec handle_status(opts :: Keyword.t(), state) :: {:idle, state}
+  def handle_status(_, state) do
+    {:idle, state}
+  end
+
+  @doc false
+  @impl true
+  @spec handle_prepare(query, Keyword.t(), state) :: {:ok, query, state}
+  def handle_prepare(query, _, state) do
+    raise "Unsupported"
+  end
+
+  @doc false
+  @impl true
+  @spec handle_execute(query, list, opts :: Keyword.t(), state) ::
+          {:ok, result, state}
+          | {:error | :disconnect, Exception.t(), state}
+  def handle_execute(query, params, opts, state) do
+    do_query(query, params, opts, state)
+  end
+
+  @doc false
+  @impl true
+  @spec handle_close(query, Keyword.t(), state) :: {:ok, result, state}
+  def handle_close(_query, _opts, _state) do
+    raise "Unsupported"
+  end
+
+  @doc false
+  @impl true
+  @spec handle_declare(query, any, Keyword.t(), state) :: no_return
+  def handle_declare(_query, _params, _opts, _state) do
+    raise "Unsupported"
+  end
+
+  @impl true
+  @spec handle_fetch(query, cursor, Keyword.t(), state) :: no_return
+  def handle_fetch(_query, _cursor, _opts, _state) do
+    raise "Unsupported"
+  end
+
+  @doc false
+  @impl true
+  @spec handle_deallocate(query, cursor, Keyword.t(), state) :: no_return
+  def handle_deallocate(_query, _cursor, _opts, _state) do
+    raise "Unsupported"
+  end
+
+  @doc false
+  @impl true
+  @spec disconnect(err :: Exception.t(), state) :: :ok
+  def disconnect(_err, _state) do
+    # TODO: accumulate query ids in state and cancel them here
+    :ok
   end
 
   @doc false
@@ -89,37 +172,6 @@ defmodule Clickhousex.Protocol do
   def reconnect(new_opts, state) do
     with :ok <- disconnect("Reconnecting", state),
          do: connect(new_opts)
-  end
-
-  @doc false
-  @spec checkin(state) :: {:ok, state}
-  def checkin(state) do
-    {:ok, state}
-  end
-
-  @doc false
-  @spec checkout(state) :: {:ok, state}
-  def checkout(state) do
-    {:ok, state}
-  end
-
-  @doc false
-  def handle_status(_, state) do
-    {:idle, state}
-  end
-
-  @doc false
-  @spec handle_prepare(query, Keyword.t(), state) :: {:ok, query, state}
-  def handle_prepare(query, _, state) do
-    {:ok, query, state}
-  end
-
-  @doc false
-  @spec handle_execute(query, list, opts :: Keyword.t(), state) ::
-          {:ok, result, state}
-          | {:error | :disconnect, Exception.t(), state}
-  def handle_execute(query, params, opts, state) do
-    do_query(query, params, opts, state)
   end
 
   defp do_query(query, params, _opts, state) do
@@ -183,51 +235,13 @@ defmodule Clickhousex.Protocol do
   end
 
   @doc false
-  def handle_declare(_query, _params, _opts, state) do
-    {:error, :cursors_not_supported, state}
-  end
-
-  @doc false
-  def handle_deallocate(_query, _cursor, _opts, state) do
-    {:error, :cursors_not_supported, state}
-  end
-
-  def handle_fetch(_query, _cursor, _opts, state) do
-    {:error, :cursors_not_supported, state}
-  end
-
-  @doc false
   defp handle_errors({:error, reason}), do: {:error, Error.exception(reason)}
   defp handle_errors(term), do: term
-
-  @doc false
-  @spec handle_begin(opts :: Keyword.t(), state) :: {:ok, result, state}
-  def handle_begin(_opts, state) do
-    {:ok, %Clickhousex.Result{}, state}
-  end
-
-  @doc false
-  @spec handle_close(query, Keyword.t(), state) :: {:ok, result, state}
-  def handle_close(_query, _opts, state) do
-    {:ok, %Clickhousex.Result{}, state}
-  end
-
-  @doc false
-  @spec handle_commit(opts :: Keyword.t(), state) :: {:ok, result, state}
-  def handle_commit(_opts, state) do
-    {:ok, %Clickhousex.Result{}, state}
-  end
 
   @doc false
   @spec handle_info(opts :: Keyword.t(), state) :: {:ok, result, state}
   def handle_info(_msg, state) do
     {:ok, state}
-  end
-
-  @doc false
-  @spec handle_rollback(opts :: Keyword.t(), state) :: {:ok, result, state}
-  def handle_rollback(_opts, state) do
-    {:ok, %Clickhousex.Result{}, state}
   end
 
   ## Private functions

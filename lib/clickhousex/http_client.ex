@@ -1,6 +1,6 @@
 defmodule Clickhousex.HTTPClient do
-  alias Clickhousex.Query
   @moduledoc false
+  alias Clickhousex.Query
 
   @codec Application.get_env(:clickhousex, :codec, Clickhousex.Codec.JSON)
 
