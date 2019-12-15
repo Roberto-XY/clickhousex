@@ -52,9 +52,9 @@ defmodule Clickhousex.Codec.Binary do
   # end
 
   def decode(bytes, %_{nullable: true} = type) when is_binary(bytes) do
-    case decode(bytes, Type.UInt8) do
-      {:ok, 0, rest} -> decode(rest, type)
-      {:ok, 1, rest} -> {:ok, nil, rest}
+    case bytes do
+      <<0, rest::binary>> -> decode(rest, %{type | nullable: false})
+      <<1, rest::binary>> -> {:ok, nil, rest}
     end
   end
 
@@ -62,12 +62,8 @@ defmodule Clickhousex.Codec.Binary do
   #   decode_struct(bytes, struct_module.decode_spec(), struct(struct_module))
   # end
 
-  def decode(bytes, :varint) when is_binary(bytes) do
-    decode_varint(bytes, 0, 0)
-  end
-
   def decode(bytes, %Type.String{}) do
-    with {:ok, byte_count, rest} <- decode(bytes, :varint),
+    with {:ok, byte_count, rest} <- decode_varint(bytes),
          true <- byte_size(rest) >= byte_count do
       <<decoded_str::binary-size(byte_count), rest::binary>> = rest
       {:ok, decoded_str, rest}
@@ -80,58 +76,53 @@ defmodule Clickhousex.Codec.Binary do
     {:ok, decoded_str, rest}
   end
 
-  def decode(bytes, {:list, data_type}) do
-    {:ok, count, rest} = decode(bytes, :varint)
-    decode_list(rest, data_type, count, [])
-  end
-
-  def decode(<<decoded::little-signed-size(64), rest::binary>>, Type.Int64) do
+  def decode(<<decoded::little-signed-size(64), rest::binary>>, %Type.Int64{}) do
     {:ok, decoded, rest}
   end
 
-  def decode(<<decoded::little-signed-size(32), rest::binary>>, Type.Int32) do
+  def decode(<<decoded::little-signed-size(32), rest::binary>>, %Type.Int32{}) do
     {:ok, decoded, rest}
   end
 
-  def decode(<<decoded::little-signed-size(16), rest::binary>>, Type.Int16) do
+  def decode(<<decoded::little-signed-size(16), rest::binary>>, %Type.Int16{}) do
     {:ok, decoded, rest}
   end
 
-  def decode(<<decoded::little-signed-size(8), rest::binary>>, Type.Int8) do
+  def decode(<<decoded::little-signed-size(8), rest::binary>>, %Type.Int8{}) do
     {:ok, decoded, rest}
   end
 
-  def decode(<<decoded::little-signed-size(64), rest::binary>>, Type.UInt64) do
+  def decode(<<decoded::little-signed-size(64), rest::binary>>, %Type.UInt64{}) do
     {:ok, decoded, rest}
   end
 
-  def decode(<<decoded::little-signed-size(32), rest::binary>>, Type.UInt32) do
+  def decode(<<decoded::little-signed-size(32), rest::binary>>, %Type.UInt32{}) do
     {:ok, decoded, rest}
   end
 
-  def decode(<<decoded::little-signed-size(16), rest::binary>>, Type.UInt16) do
+  def decode(<<decoded::little-signed-size(16), rest::binary>>, %Type.UInt16{}) do
     {:ok, decoded, rest}
   end
 
-  def decode(<<decoded::little-signed-size(8), rest::binary>>, Type.UInt8) do
+  def decode(<<decoded::little-signed-size(8), rest::binary>>, %Type.UInt8{}) do
     {:ok, decoded, rest}
   end
 
-  def decode(<<days_since_epoch::little-unsigned-size(16), rest::binary>>, Type.Date) do
+  def decode(<<days_since_epoch::little-unsigned-size(16), rest::binary>>, %Type.Date{}) do
     {:ok, date} = Date.new(1970, 01, 01)
     date = Date.add(date, days_since_epoch)
 
     {:ok, date, rest}
   end
 
-  def decode(<<seconds_since_epoch::little-unsigned-size(32), rest::binary>>, Type.DateTime) do
+  def decode(<<seconds_since_epoch::little-unsigned-size(32), rest::binary>>, %Type.DateTime{}) do
     {:ok, date_time} = NaiveDateTime.new(1970, 1, 1, 0, 0, 0)
     date_time = NaiveDateTime.add(date_time, seconds_since_epoch)
 
     {:ok, date_time, rest}
   end
 
-  def decode(<<decoded::little-signed-float-size(64), rest::binary>>, Type.Float64) do
+  def decode(<<decoded::little-signed-float-size(64), rest::binary>>, %Type.Float64{}) do
     {:ok, decoded, rest}
   end
 
@@ -139,50 +130,52 @@ defmodule Clickhousex.Codec.Binary do
     {:ok, decoded, rest}
   end
 
-  def decode(binary, rest, Type.Array) do
+  def decode(binary, %Type.Tuple{element_types: element_types})
+      when is_binary(binary) and is_list(element_types) do
+    decode_tuple(binary, element_types)
   end
 
-  def decode(binary, rest, Type.Tuple) do
+  def decode(binary, %Type.Array{element_type: element_type}) when is_binary(binary) do
+    decode_list(binary, element_type)
+  end
+
+  def decode_varint(bytes, result \\ 0, shift \\ 0)
+
+  def decode_varint(<<0::size(1), byte::size(7), rest::binary>>, result, shift) do
+    {:ok, result ||| byte <<< shift, rest}
+  end
+
+  def decode_varint(<<1::1, byte::7, rest::binary>>, result, shift) do
+    decode_varint(rest, result ||| byte <<< shift, shift + 7)
+  end
+
+  defp decode_list(binary, data_type) when is_binary(binary) do
+    {:ok, count, rest} = decode_varint(binary)
+    decode_list(rest, data_type, count, [])
   end
 
   defp decode_list(rest, _, 0, acc) when is_list(acc) do
     {:ok, Enum.reverse(acc), rest}
   end
 
-  defp decode_list(bytes, data_type, count, acc) do
-    IO.inspect(bytes)
-    IO.inspect(data_type)
-    IO.inspect(count)
-
-    IO.inspect(acc)
-
-    case decode(bytes, data_type) do
+  defp decode_list(binary, data_type, count, acc) do
+    case decode(binary, data_type) do
       {:ok, decoded, rest} -> decode_list(rest, data_type, count - 1, [decoded | acc])
       other -> other
     end
   end
 
-  def decode_tuple(rest, types, acc \\ [])
+  defp decode_tuple(binary, types, acc \\ [])
 
-  def decode_tuple(rest, [], acc) when is_list(acc) do
-    {:ok, Enum.reverse(acc) |> List.to_tuple(), rest}
+  defp decode_tuple(binary, [], acc) when is_list(acc) and is_binary(binary) do
+    {:ok, Enum.reverse(acc) |> List.to_tuple(), binary}
   end
 
-  def decode_tuple(bytes, [%type{} | types], acc) when is_binary(bytes) do
-    case decode(bytes, type) do
+  defp decode_tuple(binary, [type | types], acc) when is_binary(binary) do
+    case decode(binary, type) do
       {:ok, decoded, rest} -> decode_tuple(rest, types, [decoded | acc])
       other -> other
     end
-  end
-
-  defp decode_varint(bytes, result \\ 0, shift \\ 0)
-
-  defp decode_varint(<<0::size(1), byte::size(7), rest::binary>>, result, shift) do
-    {:ok, result ||| byte <<< shift, rest}
-  end
-
-  defp decode_varint(<<1::1, byte::7, rest::binary>>, result, shift) do
-    decode_varint(rest, result ||| byte <<< shift, shift + 7)
   end
 
   # defp decode_struct(rest, [], struct) do

@@ -26,7 +26,7 @@ defmodule Clickhousex.Codec.RowBinary do
 
   @impl Codec
   def decode(response) when is_binary(response) do
-    {:ok, column_count, rest} = Binary.decode(response, :varint)
+    {:ok, column_count, rest} = Binary.decode_varint(response)
     decode_metadata(rest, column_count)
   end
 
@@ -46,7 +46,7 @@ defmodule Clickhousex.Codec.RowBinary do
 
   defp decode_column_names(bytes, column_count, names)
        when is_binary(bytes) and is_integer(column_count) and is_list(names) do
-    {:ok, column_name, rest} = Binary.decode(bytes, Type.String)
+    {:ok, column_name, rest} = Binary.decode(bytes, %Type.String{})
     decode_column_names(rest, column_count - 1, [column_name | names])
   end
 
@@ -57,7 +57,7 @@ defmodule Clickhousex.Codec.RowBinary do
 
   defp decode_column_types(bytes, column_count, types)
        when is_binary(bytes) and is_integer(column_count) and is_list(types) do
-    {:ok, column_type, rest} = Binary.decode(bytes, Type.String)
+    {:ok, column_type, rest} = Binary.decode(bytes, %Type.String{})
     decode_column_types(rest, column_count - 1, [Type.parse(column_type) | types])
   end
 
@@ -73,6 +73,7 @@ defmodule Clickhousex.Codec.RowBinary do
     decode_rows(rest, types, [row | rows])
   end
 
+  @spec decode_row(binary, [Type.t()], [term]) :: {:ok, tuple, binary}
   defp decode_row(bytes, [], row) when is_binary(bytes) and is_list(row) do
     row_tuple =
       row
@@ -82,33 +83,7 @@ defmodule Clickhousex.Codec.RowBinary do
     {:ok, row_tuple, bytes}
   end
 
-  defp decode_row(<<1, rest::binary>>, [%_{nullable: true} | types], row) when is_list(row) do
-    decode_row(rest, types, [nil | row])
-  end
-
-  defp decode_row(<<0, rest::binary>>, [%_{nullable: true} = type | types], row)
-       when is_list(row) do
-    decode_row(rest, [type | types], row)
-  end
-
-  defp decode_row(bytes, [%Type.Array{element_type: %element_type{}} | types], row)
-       when is_binary(bytes) and is_list(row) do
-    {:ok, value, rest} = Binary.decode(bytes, {:list, element_type})
-    decode_row(rest, types, [value | row])
-  end
-
-  defp decode_row(bytes, [%Type.Tuple{element_types: element_types} | types], row)
-       when is_binary(bytes) and is_list(element_types) and is_list(row) do
-    IO.inspect(element_types)
-
-    {:ok, value, rest} =
-      Binary.decode_tuple(bytes, element_types)
-      |> IO.inspect()
-
-    decode_row(rest, types, [value | row])
-  end
-
-  defp decode_row(bytes, [%type{} | types], row) do
+  defp decode_row(bytes, [type | types], row) do
     {:ok, value, rest} = Binary.decode(bytes, type)
     decode_row(rest, types, [value | row])
   end

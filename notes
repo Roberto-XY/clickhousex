@@ -12,7 +12,7 @@ clickhouse-client --host localhost --port 9000 --time --query="SELECT * FROM sal
 
 
 clickhouse_cmd = """
-clickhouse-client --host localhost --port 9000 --time --query="SELECT [1,3,5], (5, 'ää', 4), 1 = 2, toFixedString('h', 33) FORMAT RowBinaryWithNamesAndTypes"
+clickhouse-client --host localhost --port 9000 --time --query="SELECT [1, NULL,3,toNullable(5)], (5, 'ää', 4), 1 = 2, toFixedString('h', 1) FORMAT RowBinaryWithNamesAndTypes"
 """
 {res, 0} = System.cmd("sh", ["-c", clickhouse_cmd])
 Clickhousex.Codec.RowBinary.decode(res) 
@@ -20,8 +20,15 @@ Clickhousex.Codec.RowBinary.decode(res)
 
 
 clickhouse_cmd = """
-clickhouse-client --host localhost --time --query="SELECT (5, 'ää', 4) FORMAT RowBinaryWithNamesAndTypes"
+clickhouse-client --host localhost --time --query="SELECT toNullable(toLowCardinality(5)) FORMAT RowBinaryWithNamesAndTypes"
 """
 {res, 0} = System.cmd("sh", ["-c", clickhouse_cmd])
 Clickhousex.Codec.RowBinary.decode(res) 
 
+
+
+clickhouse_cmd = """
+clickhouse-client --host localhost --time --query="SELECT toLowCardinality(toNullable(5)) FORMAT RowBinaryWithNamesAndTypes"
+"""
+{res, 0} = System.cmd("sh", ["-c", clickhouse_cmd])
+Clickhousex.Codec.RowBinary.decode(res) 

@@ -23,78 +23,67 @@ defmodule Clickhousex.Type do
   defmodule UInt8 do
     @type t :: %__MODULE__{nullable: boolean}
 
-    @enforce_keys [:nullable]
-    defstruct [:nullable]
+    defstruct nullable: false
   end
 
   defmodule UInt16 do
     @type t :: %__MODULE__{nullable: boolean}
 
-    @enforce_keys [:nullable]
-    defstruct [:nullable]
+    defstruct nullable: false
   end
 
   defmodule UInt32 do
     @type t :: %__MODULE__{nullable: boolean}
 
-    @enforce_keys [:nullable]
-    defstruct [:nullable]
+    defstruct nullable: false
   end
 
   defmodule UInt64 do
     @type t :: %__MODULE__{nullable: boolean}
 
-    @enforce_keys [:nullable]
-    defstruct [:nullable]
+    defstruct nullable: false
   end
 
   defmodule Int8 do
     @type t :: %__MODULE__{nullable: boolean}
 
-    @enforce_keys [:nullable]
-    defstruct [:nullable]
+    defstruct nullable: false
   end
 
   defmodule Int16 do
     @type t :: %__MODULE__{nullable: boolean}
 
-    @enforce_keys [:nullable]
-    defstruct [:nullable]
+    defstruct nullable: false
   end
 
   defmodule Int32 do
     @type t :: %__MODULE__{nullable: boolean}
 
-    @enforce_keys [:nullable]
-    defstruct [:nullable]
+    defstruct nullable: false
   end
 
   defmodule Int64 do
     @type t :: %__MODULE__{nullable: boolean}
 
-    @enforce_keys [:nullable]
-    defstruct [:nullable]
+    defstruct nullable: false
   end
 
   defmodule Float32 do
     @type t :: %__MODULE__{nullable: boolean}
 
-    @enforce_keys [:nullable]
-    defstruct [:nullable]
+    defstruct nullable: false
   end
 
   defmodule Float64 do
     @type t :: %__MODULE__{nullable: boolean}
 
-    @enforce_keys [:nullable]
-    defstruct [:nullable]
+    defstruct nullable: false
   end
 
   defmodule String do
     @type t :: %__MODULE__{nullable: boolean}
 
-    @enforce_keys [:nullable]
-    defstruct [:nullable]
+    defstruct nullable: false
   end
 
   defmodule FixedString do
@@ -107,22 +96,19 @@ defmodule Clickhousex.Type do
   defmodule UUID do
     @type t :: %__MODULE__{nullable: boolean}
 
-    @enforce_keys [:nullable]
-    defstruct [:nullable]
+    defstruct nullable: false
   end
 
   defmodule Date do
     @type t :: %__MODULE__{nullable: boolean}
 
-    @enforce_keys [:nullable]
-    defstruct [:nullable]
+    defstruct nullable: false
   end
 
   defmodule DateTime do
     @type t :: %__MODULE__{nullable: boolean}
 
-    @enforce_keys [:nullable]
-    defstruct [:nullable]
+    defstruct nullable: false
   end
 
   defmodule Array do
