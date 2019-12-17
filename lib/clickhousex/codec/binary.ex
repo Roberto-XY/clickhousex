@@ -4,12 +4,12 @@ defmodule Clickhousex.Codec.Binary do
 
   alias Clickhousex.Type
 
-  # def encode(:varint, num) when num < 128, do: <<num>>
-  # def encode(:varint, num), do: <<1::1, num::7, encode(:varint, num >>> 7)::binary>>
+  def encode_varint(num) when num < 128, do: <<num>>
+  def encode_varint(num), do: <<1::1, num::7, encode_varint(num >>> 7)::binary>>
 
-  # def encode(:string, str) when is_bitstring(str) do
-  #   [encode(:varint, byte_size(str)), str]
-  # end
+  def encode_string(str) when is_bitstring(str) do
+    [encode_varint(byte_size(str)), str]
+  end
 
   # def encode(:u8, i) when is_integer(i) do
   #   <<i::little-unsigned-size(8)>>
@@ -57,10 +57,6 @@ defmodule Clickhousex.Codec.Binary do
       <<1, rest::binary>> -> {:ok, nil, rest}
     end
   end
-
-  # def decode(bytes, :struct, struct_module) do
-  #   decode_struct(bytes, struct_module.decode_spec(), struct(struct_module))
-  # end
 
   def decode(bytes, %Type.String{}) do
     with {:ok, byte_count, rest} <- decode_varint(bytes),
@@ -139,6 +135,7 @@ defmodule Clickhousex.Codec.Binary do
     decode_list(binary, element_type)
   end
 
+  @spec decode_varint(binary, integer, integer) :: {:ok, integer, binary}
   def decode_varint(bytes, result \\ 0, shift \\ 0)
 
   def decode_varint(<<0::size(1), byte::size(7), rest::binary>>, result, shift) do
@@ -177,18 +174,4 @@ defmodule Clickhousex.Codec.Binary do
       other -> other
     end
   end
-
-  # defp decode_struct(rest, [], struct) do
-  #   {:ok, struct, rest}
-  # end
-
-  # defp decode_struct(rest, [{field_name, type} | specs], struct) do
-  #   case decode(rest, type) do
-  #     {:ok, decoded, rest} ->
-  #       decode_struct(rest, specs, Map.put(struct, field_name, decoded))
-
-  #     {:error, _} = err ->
-  #       err
-  #   end
-  # end
 end

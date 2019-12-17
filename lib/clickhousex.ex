@@ -62,6 +62,9 @@ defmodule Clickhousex do
     DBConnection.prepare_execute!(conn, %Query{name: "", statement: statement}, params, opts)
   end
 
+  def describe() do
+  end
+
   ## Helpers
   def defaults(opts) do
     Keyword.put_new(opts, :timeout, @timeout)

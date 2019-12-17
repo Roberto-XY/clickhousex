@@ -12,11 +12,17 @@ clickhouse-client --host localhost --port 9000 --time --query="SELECT * FROM sal
 
 
 clickhouse_cmd = """
-clickhouse-client --host localhost --port 9000 --time --query="SELECT [1, NULL,3,toNullable(5)], (5, 'ää', 4), 1 = 2, toFixedString('h', 1) FORMAT RowBinaryWithNamesAndTypes"
+clickhouse-client --host localhost --port 9000 --time --query="SELECT 1.34, [1, NULL,3,toNullable(5)], toNullable(toLowCardinality(5)), (toNullable(toLowCardinality(5)), 'ää', 4), 1 = 2, toFixedString('h', 1) FORMAT RowBinaryWithNamesAndTypes"
 """
 {res, 0} = System.cmd("sh", ["-c", clickhouse_cmd])
 Clickhousex.Codec.RowBinary.decode(res) 
 
+
+clickhouse_cmd = """
+clickhouse-client --host localhost --port 9000 --time --query="DESCRIBE TABLE(SELECT 1.34, [1, NULL,3,toNullable(5)], toNullable(toLowCardinality(5)), (toNullable(toLowCardinality(5)), 'ää', 4), 1 = 2, toFixedString('h', 1)) FORMAT RowBinaryWithNamesAndTypes"
+"""
+{res, 0} = System.cmd("sh", ["-c", clickhouse_cmd])
+Clickhousex.Codec.RowBinary.decode(res) 
 
 
 clickhouse_cmd = """
@@ -27,8 +33,79 @@ Clickhousex.Codec.RowBinary.decode(res)
 
 
 
-clickhouse_cmd = """
-clickhouse-client --host localhost --time --query="SELECT toLowCardinality(toNullable(5)) FORMAT RowBinaryWithNamesAndTypes"
-"""
-{res, 0} = System.cmd("sh", ["-c", clickhouse_cmd])
-Clickhousex.Codec.RowBinary.decode(res) 
+{:ok, socket} = :gen_tcp.connect('localhost', 9000, [:binary, nodelay: true])
+
+data = Clickhousex.Codec.Binary.encode_varint(0)
+
+data = [data | Clickhousex.Codec.Binary.encode_string("Hellfire")]
+
+data = [data | Clickhousex.Codec.Binary.encode_varint(19)]
+
+data = [data | Clickhousex.Codec.Binary.encode_varint(16)]
+
+data = [data | Clickhousex.Codec.Binary.encode_varint(54427)]
+
+data = [data | Clickhousex.Codec.Binary.encode_string("default")]
+
+data = [data | Clickhousex.Codec.Binary.encode_string("default-user")]
+
+data = [data | Clickhousex.Codec.Binary.encode_string("")]
+IO.iodata_to_binary(data)
+
+:ok = :gen_tcp.send(socket, data)
+receive do {:tcp, port, binary} -> Clickhousex.Protocol.decode_server_msg(binary) end
+
+
+:ok = :gen_tcp.close(socket)
+
+
+server_name = read_binary_str(self.fin)
+            server_version_major = read_varint(self.fin)
+            server_version_minor = read_varint(self.fin)
+            server_revision = read_varint(self.fin)
+
+            server_timezone = None
+            if server_revision >= \
+                    defines.DBMS_MIN_REVISION_WITH_SERVER_TIMEZONE:
+                server_timezone = read_binary_str(self.fin)
+
+            server_display_name = ''
+            if server_revision >= \
+                    defines.DBMS_MIN_REVISION_WITH_SERVER_DISPLAY_NAME:
+                server_display_name = read_binary_str(self.fin)
+
+            server_version_patch = server_revision
+            if server_revision >= \
+                    defines.DBMS_MIN_REVISION_WITH_VERSION_PATCH:
+                server_version_patch = read_varint(self.fin)
+
+            self.server_info = ServerInfo(
+                server_name, server_version_major, server_version_minor,
+                server_version_patch, server_revision,
+                server_timezone, server_display_name
+            )
+            self.context.server_info = self.server_info
+
+
+   def read_exception(buf, additional_message=None):
+    code = read_binary_int32(buf)
+    name = read_binary_str(buf)
+    message = read_binary_str(buf)
+    stack_trace = read_binary_str(buf)
+    has_nested = bool(read_binary_uint8(buf))
+
+    new_message = ''
+
+    if additional_message:
+        new_message += additional_message + '. '
+
+    if name != 'DB::Exception':
+        new_message += name + ". "
+
+    new_message += message + ". Stack trace:\n\n" + stack_trace
+
+    nested = None
+    if has_nested:
+        nested = read_exception(buf)
+
+    return ServerException(new_message, code, nested=nested)

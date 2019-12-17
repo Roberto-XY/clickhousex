@@ -21,76 +21,76 @@ defmodule Clickhousex.Type do
           | Type.Tuple.t()
 
   defmodule UInt8 do
-    @type t :: %__MODULE__{nullable: boolean}
+    @type t :: %__MODULE__{nullable: boolean, low_cardinality: boolean}
 
-    defstruct nullable: false
+    defstruct nullable: false, low_cardinality: false
   end
 
   defmodule UInt16 do
-    @type t :: %__MODULE__{nullable: boolean}
+    @type t :: %__MODULE__{nullable: boolean, low_cardinality: boolean}
 
-    defstruct nullable: false
+    defstruct nullable: false, low_cardinality: false
   end
 
   defmodule UInt32 do
-    @type t :: %__MODULE__{nullable: boolean}
+    @type t :: %__MODULE__{nullable: boolean, low_cardinality: boolean}
 
-    defstruct nullable: false
+    defstruct nullable: false, low_cardinality: false
   end
 
   defmodule UInt64 do
-    @type t :: %__MODULE__{nullable: boolean}
+    @type t :: %__MODULE__{nullable: boolean, low_cardinality: boolean}
 
-    defstruct nullable: false
+    defstruct nullable: false, low_cardinality: false
   end
 
   defmodule Int8 do
-    @type t :: %__MODULE__{nullable: boolean}
+    @type t :: %__MODULE__{nullable: boolean, low_cardinality: boolean}
 
-    defstruct nullable: false
+    defstruct nullable: false, low_cardinality: false
   end
 
   defmodule Int16 do
-    @type t :: %__MODULE__{nullable: boolean}
+    @type t :: %__MODULE__{nullable: boolean, low_cardinality: boolean}
 
-    defstruct nullable: false
+    defstruct nullable: false, low_cardinality: false
   end
 
   defmodule Int32 do
-    @type t :: %__MODULE__{nullable: boolean}
+    @type t :: %__MODULE__{nullable: boolean, low_cardinality: boolean}
 
-    defstruct nullable: false
+    defstruct nullable: false, low_cardinality: false
   end
 
   defmodule Int64 do
-    @type t :: %__MODULE__{nullable: boolean}
+    @type t :: %__MODULE__{nullable: boolean, low_cardinality: boolean}
 
-    defstruct nullable: false
+    defstruct nullable: false, low_cardinality: false
   end
 
   defmodule Float32 do
-    @type t :: %__MODULE__{nullable: boolean}
+    @type t :: %__MODULE__{nullable: boolean, low_cardinality: boolean}
 
-    defstruct nullable: false
+    defstruct nullable: false, low_cardinality: false
   end
 
   defmodule Float64 do
-    @type t :: %__MODULE__{nullable: boolean}
+    @type t :: %__MODULE__{nullable: boolean, low_cardinality: boolean}
 
-    defstruct nullable: false
+    defstruct nullable: false, low_cardinality: false
   end
 
   defmodule String do
-    @type t :: %__MODULE__{nullable: boolean}
+    @type t :: %__MODULE__{nullable: boolean, low_cardinality: boolean}
 
-    defstruct nullable: false
+    defstruct nullable: false, low_cardinality: false
   end
 
   defmodule FixedString do
-    @type t :: %__MODULE__{nullable: boolean, length: non_neg_integer}
+    @type t :: %__MODULE__{nullable: boolean, low_cardinality: boolean, length: non_neg_integer}
 
-    @enforce_keys [:nullable, :length]
-    defstruct [:nullable, :length]
+    @enforce_keys [:length]
+    defstruct nullable: false, low_cardinality: false, length: nil
   end
 
   defmodule UUID do
@@ -100,140 +100,164 @@ defmodule Clickhousex.Type do
   end
 
   defmodule Date do
-    @type t :: %__MODULE__{nullable: boolean}
+    @type t :: %__MODULE__{nullable: boolean, low_cardinality: boolean}
 
-    defstruct nullable: false
+    defstruct nullable: false, low_cardinality: false
   end
 
   defmodule DateTime do
-    @type t :: %__MODULE__{nullable: boolean}
+    @type t :: %__MODULE__{nullable: boolean, low_cardinality: boolean}
 
-    defstruct nullable: false
+    defstruct nullable: false, low_cardinality: false
   end
 
   defmodule Array do
     @type t :: %__MODULE__{element_type: Type.t()}
 
     @enforce_keys [:element_type]
-    defstruct [:element_type]
+    defstruct element_type: nil
   end
 
   defmodule Tuple do
     @type t :: %__MODULE__{element_types: [Type.t()]}
 
     @enforce_keys [:element_types]
-    defstruct [:element_types]
+    defstruct element_types: nil
   end
 
   @spec parse(binary) :: Type.t()
   def parse(binary) when is_binary(binary) do
-    # with {:ok, {type, ""}} <- parse(binary, false) do
+    # with {:ok, {type, ""}} <- p_parse(binary, false) do
     #   {:ok, type}
     # end
-    {:ok, {type, ""}} = parse(binary, false)
+    {:ok, {type, ""}} = p_parse(binary)
     type
   end
 
-  @spec parse(binary, nullable :: boolean) :: {:ok, {Type.t(), binary}}
-  defp parse(<<"Array(", tail::binary>>, false) do
-    with {:ok, {type, child_tail}} <- parse(tail, false) do
+  @spec p_parse(binary) :: {:ok, {Type.t(), binary}} | {:error, String.t()}
+  defp p_parse(<<"Array(", tail::binary>>) do
+    with {:ok, {type, child_tail}} <- p_parse(tail) do
       case child_tail do
         <<")", next::binary>> -> {:ok, {%Type.Array{element_type: type}, next}}
-        unexpected_tail when is_binary(unexpected_tail) -> {:error, unexpected_tail}
+        unexpected_tail -> {:error, unexpected_tail}
       end
     end
   end
 
-  defp parse(<<"Tuple", tail::binary>>, false) do
-    with {:ok, {types, tail}} when is_list(types) and is_binary(tail) <- parse_list(tail) do
+  defp p_parse(<<"Tuple", tail::binary>>) do
+    with {:ok, {types, tail}} when is_list(types) and is_binary(tail) <- p_parse_list(tail) do
       {:ok, {%Type.Tuple{element_types: types}, tail}}
     end
   end
 
-  defp parse(<<"Nullable(", tail::binary>>, nullable) when is_boolean(nullable) do
-    with {:ok, {type, child_tail}} <- parse(tail, true) do
-      case child_tail do
-        <<")", next::binary>> -> {:ok, {type, next}}
-        unexpected_tail when is_binary(unexpected_tail) -> {:error, unexpected_tail}
-      end
+  # TODO: sinlge case
+  defp p_parse(<<"Nullable(", tail::binary>>) do
+    case p_parse(tail) do
+      {:ok, {%_{nullable: nullable} = type, <<")", next::binary>>}}
+      when is_boolean(nullable) ->
+        {:ok, {%{type | nullable: true}, next}}
+
+      {:ok, {type, <<")", next::binary>>}} ->
+        {:error, "Unsupported Nullable() type. Found #{inspect(type)}"}
+
+      {:ok, {_type, unexpected_tail}} ->
+        {:error, unexpected_tail}
+
+      {:error, _} = error ->
+        error
     end
   end
 
-  defp parse(<<"FixedString(", tail::binary>>, nullable) when is_boolean(nullable) do
-    with {:ok, {number, child_tail}} when is_integer(number) <- parse_number(tail) do
+  defp p_parse(<<"LowCardinality(", tail::binary>>) do
+    case p_parse(tail) do
+      {:ok, {%_{low_cardinality: low_cardinality} = type, <<")", next::binary>>}}
+      when is_boolean(low_cardinality) ->
+        {:ok, {%{type | low_cardinality: true}, next}}
+
+      {:ok, {type, <<")", next::binary>>}} ->
+        {:error, "Unsupported LowCardinality() type. Found #{inspect(type)}"}
+
+      {:ok, {_type, unexpected_tail}} ->
+        {:error, unexpected_tail}
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp p_parse(<<"FixedString(", tail::binary>>) do
+    with {:ok, {number, child_tail}} when is_integer(number) <- p_parse_number(tail) do
       case child_tail do
         <<")", next::binary>> ->
-          {:ok, {%Type.FixedString{length: number, nullable: nullable}, next}}
+          {:ok, {%Type.FixedString{length: number}, next}}
 
-        unexpected_tail when is_binary(unexpected_tail) ->
+        unexpected_tail ->
           {:error, unexpected_tail}
       end
     end
   end
 
-  defp parse(<<"UInt8", tail::binary>>, nullable) when is_boolean(nullable),
-    do: {:ok, {%Type.UInt8{nullable: nullable}, tail}}
+  defp p_parse(<<"UInt8", tail::binary>>),
+    do: {:ok, {%Type.UInt8{}, tail}}
 
-  defp parse(<<"UInt16", tail::binary>>, nullable) when is_boolean(nullable),
-    do: {:ok, {%Type.UInt16{nullable: nullable}, tail}}
+  defp p_parse(<<"UInt16", tail::binary>>),
+    do: {:ok, {%Type.UInt16{}, tail}}
 
-  defp parse(<<"Int16", tail::binary>>, nullable) when is_boolean(nullable),
-    do: {:ok, {%Type.Int16{nullable: nullable}, tail}}
+  defp p_parse(<<"Int16", tail::binary>>),
+    do: {:ok, {%Type.Int16{}, tail}}
 
-  defp parse(<<"Int32", tail::binary>>, nullable) when is_boolean(nullable),
-    do: {:ok, {%Type.Int32{nullable: nullable}, tail}}
+  defp p_parse(<<"Int32", tail::binary>>),
+    do: {:ok, {%Type.Int32{}, tail}}
 
-  defp parse(<<"Float64", tail::binary>>, nullable) when is_boolean(nullable),
-    do: {:ok, {%Type.Float64{nullable: nullable}, tail}}
+  defp p_parse(<<"Float64", tail::binary>>),
+    do: {:ok, {%Type.Float64{}, tail}}
 
-  defp parse(<<"String", tail::binary>>, nullable) when is_boolean(nullable),
-    do: {:ok, {%Type.String{nullable: nullable}, tail}}
+  defp p_parse(<<"String", tail::binary>>),
+    do: {:ok, {%Type.String{}, tail}}
 
-  defp parse(unexpected_tail, nullable)
-       when is_binary(unexpected_tail) and is_boolean(nullable),
-       do: {:error, unexpected_tail}
+  defp p_parse(unexpected_tail), do: {:error, unexpected_tail}
 
-  @spec parse_number(binary, binary) ::
+  @spec p_parse_number(binary, binary) ::
           {:ok, {integer, binary}} | {:error, unexpected_tail :: binary}
-  defp parse_number(binary, acc \\ "")
+  defp p_parse_number(binary, acc \\ "")
        when is_binary(binary) do
     case binary do
       <<")", tail::binary>> ->
         {:ok, {Elixir.String.to_integer(IO.chardata_to_string(acc)), <<")", tail::binary>>}}
 
       <<x::utf8, tail::binary>> ->
-        parse_number(tail, [<<x::utf8>>, acc])
+        p_parse_number(tail, [<<x::utf8>>, acc])
 
       unexpected_tail ->
         {:error, unexpected_tail}
     end
   end
 
-  @spec parse_list(binary, [Type.t()]) ::
+  @spec p_parse_list(binary, [Type.t()]) ::
           {:ok, {[Type.t()], binary}} | {:error, unexpected_tail :: binary}
-  defp parse_list(tail, acc \\ [])
+  defp p_parse_list(tail, acc \\ [])
 
-  defp parse_list(<<")", tail::binary>>, acc) when is_list(acc) and length(acc) > 0 do
+  defp p_parse_list(<<")", tail::binary>>, acc) when is_list(acc) and length(acc) > 0 do
     {:ok, {Enum.reverse(acc), tail}}
   end
 
-  defp parse_list(<<", ", tail::binary>>, acc) when is_list(acc) do
-    with {:ok, {type, child_tail}} <- parse(tail, false) do
-      parse_list(child_tail, [type | acc])
+  defp p_parse_list(<<", ", tail::binary>>, acc) when is_list(acc) do
+    with {:ok, {type, child_tail}} <- p_parse(tail) do
+      p_parse_list(child_tail, [type | acc])
     end
   end
 
-  defp parse_list(<<"()", tail::binary>>, []) do
+  defp p_parse_list(<<"()", tail::binary>>, []) do
     {:ok, {[], tail}}
   end
 
-  defp parse_list(<<"(", tail::binary>>, []) do
-    with {:ok, {type, child_tail}} <- parse(tail, false) do
-      parse_list(child_tail, [type])
+  defp p_parse_list(<<"(", tail::binary>>, []) do
+    with {:ok, {type, child_tail}} <- p_parse(tail) do
+      p_parse_list(child_tail, [type])
     end
   end
 
-  defp parse_list(unexpected_tail, _) when is_binary(unexpected_tail),
+  defp p_parse_list(unexpected_tail, _),
     do: {:error, unexpected_tail}
 
   @types [
@@ -261,7 +285,7 @@ defmodule Clickhousex.Type do
 
   Enum.each(@types, fn module ->
     @spec nullable?(unquote(module).t()) :: boolean
-    def nullable?(%unquote(module){nullable: nullable}) when is_boolean(nullable), do: nullable
+    def nullable?(%unquote(module){nullable: nullable}), do: nullable
   end)
 
   @spec nullable?(Type.Array.t()) :: boolean
@@ -269,36 +293,4 @@ defmodule Clickhousex.Type do
 
   @spec nullable?(Type.Tuple.t()) :: boolean
   def nullable?(%Type.Tuple{}), do: false
-
-  @doc """
-
-  """
-  def to_clickhouse_string(type)
-
-  Enum.each(@types, fn module ->
-    @spec to_clickhouse_string(unquote(module).t()) :: String.t()
-    def to_clickhouse_string(%unquote(module){nullable: nullable}) when is_boolean(nullable) do
-      type_string = Atom.to_string(unquote(module)) |> Elixir.String.split(".") |> List.last()
-
-      if nullable do
-        "Nullable(#{type_string})"
-      else
-        type_string
-      end
-    end
-  end)
-
-  @spec to_clickhouse_string(Type.Array.t()) :: String.t()
-  def to_clickhouse_string(%Type.Array{element_type: type}) do
-    "Array(#{Type.to_clickhouse_string(type)})"
-  end
-
-  @spec to_clickhouse_string(Type.Tuple.t()) :: String.t()
-  def to_clickhouse_string(%Type.Tuple{element_types: Type}) do
-    types =
-      Enum.map(Type, &Type.to_clickhouse_string/1)
-      |> Enum.intersperse(",")
-
-    "Tuple(#{types})"
-  end
 end
