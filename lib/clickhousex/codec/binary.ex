@@ -11,45 +11,45 @@ defmodule Clickhousex.Codec.Binary do
     [encode_varint(byte_size(str)), str]
   end
 
-  # def encode(:u8, i) when is_integer(i) do
-  #   <<i::little-unsigned-size(8)>>
-  # end
+  def encode(i, %Type.UInt8{}) when is_integer(i) do
+    <<i::little-unsigned-size(8)>>
+  end
 
-  # def encode(:u16, i) do
-  #   <<i::little-unsigned-size(16)>>
-  # end
+  def encode(i, %Type.UInt16{}) when is_integer(i) do
+    <<i::little-unsigned-size(16)>>
+  end
 
-  # def encode(:u32, i) do
-  #   <<i::little-unsigned-size(32)>>
-  # end
+  def encode(i, %Type.UInt32{}) when is_integer(i) do
+    <<i::little-unsigned-size(32)>>
+  end
 
-  # def encode(:u64, i) do
-  #   <<i::little-unsigned-size(64)>>
-  # end
+  def encode(i, %Type.UInt64{}) when is_integer(i) do
+    <<i::little-unsigned-size(64)>>
+  end
 
-  # def encode(:i8, i) do
-  #   <<i::little-signed-size(8)>>
-  # end
+  def encode(i, %Type.Int8{}) when is_integer(i) do
+    <<i::little-signed-size(8)>>
+  end
 
-  # def encode(:i16, i) do
-  #   <<i::little-signed-size(16)>>
-  # end
+  def encode(i, %Type.Int16{}) when is_integer(i) do
+    <<i::little-signed-size(16)>>
+  end
 
-  # def encode(:i32, i) do
-  #   <<i::little-signed-size(32)>>
-  # end
+  def encode(i, %Type.Int32{}) when is_integer(i) do
+    <<i::little-signed-size(32)>>
+  end
 
-  # def encode(:i64, i) do
-  #   <<i::little-signed-size(64)>>
-  # end
+  def encode(i, %Type.Int64{}) when is_integer(i) do
+    <<i::little-signed-size(64)>>
+  end
 
-  # def encode(:boolean, true) do
-  #   encode(:u8, 1)
-  # end
+  def encode(true) do
+    encode(1, %Type.UInt8{})
+  end
 
-  # def encode(:boolean, false) do
-  #   encode(:u8, 0)
-  # end
+  def encode(false) do
+    encode(0, %Type.UInt8{})
+  end
 
   def decode(bytes, %_{nullable: true} = type) when is_binary(bytes) do
     case bytes do

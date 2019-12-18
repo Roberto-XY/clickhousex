@@ -253,23 +253,70 @@ defmodule Clickhousex.Protocol do
   alias Clickhousex.Codec.Binary
   alias Clickhousex.Type
 
+  def connect() do
+    :gen_tcp.connect('localhost', 9000, [:binary, nodelay: true])
+  end
+
+  def hello(socket) do
+    data = Clickhousex.Codec.Binary.encode_varint(0)
+    data = [data | Clickhousex.Codec.Binary.encode_string("Hellfire")]
+    data = [data | Clickhousex.Codec.Binary.encode_varint(19)]
+    data = [data | Clickhousex.Codec.Binary.encode_varint(16)]
+    data = [data | Clickhousex.Codec.Binary.encode_varint(54427)]
+    data = [data | Clickhousex.Codec.Binary.encode_string("default")]
+    data = [data | Clickhousex.Codec.Binary.encode_string("default")]
+    data = [data | Clickhousex.Codec.Binary.encode_string("")]
+    :ok = :gen_tcp.send(socket, data)
+    msg_recv()
+    :gen_tcp.close(socket)
+  end
+
+  def msg_recv() do
+    receive do
+      {:tcp, sock, buffer} ->
+        decode_server_msg(buffer)
+    after
+      5000 ->
+        raise "Timeout"
+    end
+  end
+
   def decode_server_msg(binary) when is_binary(binary) do
+    IO.inspect(binary, label: "RAW")
+    IO.inspect(Base.encode16(binary), label: "BASE!16")
+
     case Binary.decode_varint(binary) do
+      {:ok, 0, tail} -> decode_hello(tail) |> IO.inspect(label: "HELLO")
       {:ok, 2, tail} -> decode_exception(tail) |> IO.inspect(label: "EXECPTION")
       x -> IO.inspect(x, label: "RESPONSE")
     end
   end
 
+  def decode_hello(binary) do
+    {:ok, server_name, tail} = Binary.decode(binary, %Type.String{})
+    {:ok, server_version_major, tail} = Binary.decode_varint(tail)
+    {:ok, server_version_minor, tail} = Binary.decode_varint(tail)
+    {:ok, server_revision, tail} = Binary.decode_varint(tail)
+    {:ok, server_timezone, tail} = Binary.decode(tail, %Type.String{})
+    {:ok, server_display_name, tail} = Binary.decode(tail, %Type.String{})
+    {:ok, server_version_patch, tail} = Binary.decode_varint(tail)
+
+    {server_name, server_version_major, server_version_minor, server_revision, server_timezone,
+     server_display_name, server_version_patch, tail}
+  end
+
   def decode_exception(binary) when is_binary(binary) do
-    IO.inspect(binary, label: "RAW")
     {:ok, code, tail} = Binary.decode(binary, %Type.UInt32{})
     {:ok, name, tail} = Binary.decode(tail, %Type.String{})
     {:ok, message, tail} = Binary.decode(tail, %Type.String{})
     {:ok, stack_trace, tail} = Binary.decode(tail, %Type.String{})
     {:ok, has_nested, tail} = Binary.decode(tail, %Type.UInt8{})
 
-    nested = if has_nested do decode_exception(tail)
+    nested =
+      if has_nested != 0 do
+        decode_exception(tail)
+      end
 
-    {code, name, message, stack_trace, has_nested, nested, tail}
+    {code, name, message, stack_trace, nested, tail}
   end
 end
