@@ -37,6 +37,8 @@ import Clickhousex.Protocol
 
 hello(socket)
 
+ping(socket)
+
 :ok = :gen_tcp.close(socket)
 
 Clickhousex.Codec.Binary.decode_varint(<<10, 67, 108, 105,  99, 107, 72, 111, 117, 115, 101>>)

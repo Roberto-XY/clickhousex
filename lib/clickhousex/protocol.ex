@@ -268,7 +268,19 @@ defmodule Clickhousex.Protocol do
     data = [data | Clickhousex.Codec.Binary.encode_string("")]
     :ok = :gen_tcp.send(socket, data)
     msg_recv()
-    :gen_tcp.close(socket)
+  end
+
+  def ping(socket) do
+    data = Clickhousex.Codec.Binary.encode_varint(4)
+    :ok = :gen_tcp.send(socket, data)
+
+    receive do
+      {:tcp, sock, buffer} ->
+        decode_pong(buffer)
+    after
+      5000 ->
+        raise "Timeout"
+    end
   end
 
   def msg_recv() do
@@ -318,5 +330,13 @@ defmodule Clickhousex.Protocol do
       end
 
     {code, name, message, stack_trace, nested, tail}
+  end
+
+  def decode_pong(binary) when is_binary(binary) do
+    case Binary.decode_varint(binary) do
+      {:ok, 3, tail} -> IO.inspect(tail, label: "Orphan progress")
+      {:ok, 2, tail} -> decode_exception(tail) |> IO.inspect(label: "EXECPTION")
+      {:ok, 4, tail} -> true
+    end
   end
 end
